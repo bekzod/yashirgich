@@ -1,0 +1,8 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+transformers>=4.37.0
+torch>=2.0.0
+pydantic>=2.0.0
+presidio-analyzer>=2.2.0
+spacy>=3.7.0
+pymorphy2>=0.9.1

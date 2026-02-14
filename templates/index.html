@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>PII Detection</title>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                max-width: 900px;
+                margin: 0 auto;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            h1 {
+                color: #333;
+            }
+            .container {
+                background: white;
+                padding: 24px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            .upload-area {
+                border: 2px dashed #ccc;
+                border-radius: 8px;
+                padding: 40px;
+                text-align: center;
+                cursor: pointer;
+                transition: border-color 0.2s;
+            }
+            .upload-area:hover,
+            .upload-area.dragover {
+                border-color: #007bff;
+            }
+            .upload-area input {
+                display: none;
+            }
+            .btn {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 16px;
+                margin-top: 16px;
+            }
+            .btn:hover {
+                background: #0056b3;
+            }
+            .btn:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+            }
+            textarea {
+                width: 100%;
+                height: 150px;
+                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                font-family: inherit;
+                font-size: 14px;
+                resize: vertical;
+            }
+            .results {
+                margin-top: 20px;
+            }
+            .masked-text {
+                background: #f8f9fa;
+                padding: 16px;
+                border-radius: 6px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-family: monospace;
+            }
+            .entity {
+                display: inline-block;
+                margin: 4px;
+                padding: 6px 10px;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            .entity.rubai {
+                background: #d4edda;
+            }
+            .entity.presidio {
+                background: #cce5ff;
+            }
+            .entity-type {
+                font-weight: bold;
+            }
+            .hidden {
+                display: none;
+            }
+            .loading {
+                color: #666;
+                font-style: italic;
+            }
+            .error {
+                color: #dc3545;
+                padding: 12px;
+                background: #f8d7da;
+                border-radius: 6px;
+            }
+            .tabs {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+            .tab {
+                padding: 8px 16px;
+                border: 1px solid #ddd;
+                background: white;
+                border-radius: 6px 6px 0 0;
+                cursor: pointer;
+            }
+            .tab.active {
+                background: #007bff;
+                color: white;
+                border-color: #007bff;
+            }
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+            .mapping-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+            .mapping-row label {
+                min-width: 150px;
+                font-family: monospace;
+                font-size: 13px;
+                background: #e9ecef;
+                padding: 6px 8px;
+                border-radius: 4px;
+            }
+            .mapping-row input {
+                flex: 1;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            @keyframes highlight-mask {
+                0% {
+                    background-color: #fff3cd;
+                }
+                50% {
+                    background-color: #ffc107;
+                }
+                100% {
+                    background-color: #28a745;
+                    color: white;
+                }
+            }
+            @keyframes highlight-revert {
+                0% {
+                    background-color: #cce5ff;
+                }
+                50% {
+                    background-color: #007bff;
+                    color: white;
+                }
+                100% {
+                    background-color: #d4edda;
+                }
+            }
+            .highlight-mask {
+                animation: highlight-mask 0.6s ease-out forwards;
+                border-radius: 3px;
+                padding: 0 2px;
+            }
+            .highlight-revert {
+                animation: highlight-revert 0.6s ease-out forwards;
+                border-radius: 3px;
+                padding: 0 2px;
+            }
+            .animated-text {
+                line-height: 1.8;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>PII Detection</h1>
+
+        <div class="container">
+            <div class="tabs">
+                <button class="tab active" data-tab="file">Upload File</button>
+                <button class="tab" data-tab="text">Enter Text</button>
+                <button class="tab" data-tab="revert">Revert Masking</button>
+            </div>
+
+            <div id="file-tab" class="tab-content active">
+                <div class="upload-area" id="dropzone">
+                    <input
+                        type="file"
+                        id="fileInput"
+                        accept=".txt,.csv,.json,.md"
+                    />
+                    <p>Drag & drop a text file here, or click to select</p>
+                    <p style="color: #666; font-size: 14px">
+                        Supports .txt, .csv, .json, .md files
+                    </p>
+                </div>
+                <div
+                    id="fileName"
+                    class="hidden"
+                    style="margin-top: 12px; color: #333"
+                ></div>
+            </div>
+
+            <div id="text-tab" class="tab-content">
+                <textarea
+                    id="textInput"
+                    placeholder="Enter text to analyze for PII..."
+                ></textarea>
+            </div>
+
+            <div id="revert-tab" class="tab-content">
+                <textarea
+                    id="revertInput"
+                    placeholder="Paste masked text here (e.g., Hello <<NAME_1>>, your phone is <<PHONE_1>>)..."
+                ></textarea>
+                <div
+                    id="mappingsContainer"
+                    class="hidden"
+                    style="margin-top: 16px"
+                >
+                    <h4 style="margin: 0 0 8px 0">Fill in original values:</h4>
+                    <div id="mappingsList"></div>
+                </div>
+            </div>
+
+            <button class="btn" id="detectBtn">Detect PII</button>
+            <button class="btn hidden" id="revertBtn">
+                Revert to Original
+            </button>
+        </div>
+
+        <div id="results" class="container hidden">
+            <h2>Results</h2>
+            <div id="loading" class="loading hidden">Analyzing...</div>
+            <div id="error" class="error hidden"></div>
+            <div id="output" class="hidden">
+                <h3>Masked Text</h3>
+                <div id="maskedText" class="masked-text"></div>
+                <h3>Detected Entities</h3>
+                <div id="entities"></div>
+            </div>
+        </div>
+
+        <script>
+            const dropzone = document.getElementById("dropzone");
+            const fileInput = document.getElementById("fileInput");
+            const textInput = document.getElementById("textInput");
+            const revertInput = document.getElementById("revertInput");
+            const detectBtn = document.getElementById("detectBtn");
+            const revertBtn = document.getElementById("revertBtn");
+            const results = document.getElementById("results");
+            const loading = document.getElementById("loading");
+            const error = document.getElementById("error");
+            const output = document.getElementById("output");
+            const maskedText = document.getElementById("maskedText");
+            const entities = document.getElementById("entities");
+            const fileName = document.getElementById("fileName");
+            const tabs = document.querySelectorAll(".tab");
+            const mappingsContainer =
+                document.getElementById("mappingsContainer");
+            const mappingsList = document.getElementById("mappingsList");
+
+            let selectedFile = null;
+            let activeTab = "file";
+            let detectedMasks = [];
+
+            // Animate masking: show original text, then highlight and replace each entity one by one
+            async function animateMasking(originalText, entities) {
+                if (entities.length === 0) {
+                    maskedText.textContent = originalText;
+                    return;
+                }
+
+                // Sort entities by start position
+                const sorted = [...entities].sort((a, b) => a.start - b.start);
+
+                // Build initial HTML with spans for each entity
+                let html = "";
+                let lastEnd = 0;
+                sorted.forEach((e, i) => {
+                    html += escapeHtml(originalText.slice(lastEnd, e.start));
+                    html += `<span class="entity-span" data-index="${i}" data-masked="${escapeHtml(e.masked_as)}">${escapeHtml(e.original)}</span>`;
+                    lastEnd = e.end;
+                });
+                html += escapeHtml(originalText.slice(lastEnd));
+
+                maskedText.innerHTML = html;
+                maskedText.classList.add("animated-text");
+
+                // Animate each entity one by one
+                for (let i = 0; i < sorted.length; i++) {
+                    const span = maskedText.querySelector(
+                        `[data-index="${i}"]`,
+                    );
+                    if (span) {
+                        span.classList.add("highlight-mask");
+                        await sleep(300);
+                        span.textContent = span.dataset.masked;
+                        await sleep(400);
+                    }
+                }
+            }
+
+            // Animate reverting: show masked text, then highlight and replace each mask one by one
+            async function animateReverting(maskedTextStr, mappings) {
+                if (mappings.length === 0) {
+                    maskedText.textContent = maskedTextStr;
+                    return;
+                }
+
+                // Find all mask positions
+                const maskPositions = [];
+                mappings.forEach(({ mask, value }) => {
+                    let pos = 0;
+                    while ((pos = maskedTextStr.indexOf(mask, pos)) !== -1) {
+                        maskPositions.push({
+                            start: pos,
+                            end: pos + mask.length,
+                            mask,
+                            value,
+                        });
+                        pos += mask.length;
+                    }
+                });
+                maskPositions.sort((a, b) => a.start - b.start);
+
+                // Build initial HTML
+                let html = "";
+                let lastEnd = 0;
+                maskPositions.forEach((p, i) => {
+                    html += escapeHtml(maskedTextStr.slice(lastEnd, p.start));
+                    html += `<span class="mask-span" data-index="${i}" data-value="${escapeHtml(p.value)}">${escapeHtml(p.mask)}</span>`;
+                    lastEnd = p.end;
+                });
+                html += escapeHtml(maskedTextStr.slice(lastEnd));
+
+                maskedText.innerHTML = html;
+                maskedText.classList.add("animated-text");
+
+                // Animate each mask one by one
+                for (let i = 0; i < maskPositions.length; i++) {
+                    const span = maskedText.querySelector(
+                        `.mask-span[data-index="${i}"]`,
+                    );
+                    if (span) {
+                        span.classList.add("highlight-revert");
+                        await sleep(300);
+                        span.textContent = span.dataset.value;
+                        await sleep(400);
+                    }
+                }
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement("div");
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            function sleep(ms) {
+                return new Promise((resolve) => setTimeout(resolve, ms));
+            }
+
+            // Detect <<ENTITY_N>> patterns in text
+            function detectMaskedEntities(text) {
+                const pattern = /<<([A-Z_]+_\d+)>>/g;
+                const masks = new Set();
+                let match;
+                while ((match = pattern.exec(text)) !== null) {
+                    masks.add(match[0]);
+                }
+                return Array.from(masks).sort();
+            }
+
+            // Update UI based on active tab
+            function updateButtons() {
+                if (activeTab === "revert") {
+                    detectBtn.classList.add("hidden");
+                    revertBtn.classList.remove("hidden");
+                } else {
+                    detectBtn.classList.remove("hidden");
+                    revertBtn.classList.add("hidden");
+                }
+            }
+
+            tabs.forEach((tab) => {
+                tab.addEventListener("click", () => {
+                    tabs.forEach((t) => t.classList.remove("active"));
+                    tab.classList.add("active");
+                    activeTab = tab.dataset.tab;
+                    document
+                        .querySelectorAll(".tab-content")
+                        .forEach((c) => c.classList.remove("active"));
+                    document
+                        .getElementById(activeTab + "-tab")
+                        .classList.add("active");
+                    updateButtons();
+                });
+            });
+
+            // Auto-detect masks when pasting/typing in revert textarea
+            revertInput.addEventListener("input", () => {
+                const text = revertInput.value;
+                detectedMasks = detectMaskedEntities(text);
+
+                if (detectedMasks.length > 0) {
+                    mappingsContainer.classList.remove("hidden");
+                    mappingsList.innerHTML = detectedMasks
+                        .map(
+                            (mask) =>
+                                `<div class="mapping-row">
+                            <label>${mask}</label>
+                            <input type="text" data-mask="${mask}" placeholder="Enter original value...">
+                        </div>`,
+                        )
+                        .join("");
+                } else {
+                    mappingsContainer.classList.add("hidden");
+                    mappingsList.innerHTML = "";
+                }
+            });
+
+            // Revert button click
+            revertBtn.addEventListener("click", async () => {
+                const text = revertInput.value;
+                const inputs = mappingsList.querySelectorAll("input");
+
+                results.classList.remove("hidden");
+                error.classList.add("hidden");
+                output.classList.add("hidden");
+
+                // Check if all mappings are filled
+                let allFilled = true;
+                inputs.forEach((input) => {
+                    if (!input.value.trim()) {
+                        allFilled = false;
+                    }
+                });
+
+                if (!allFilled) {
+                    error.textContent = "Please fill in all mapping values";
+                    error.classList.remove("hidden");
+                    return;
+                }
+
+                // Build mappings array
+                const mappings = [];
+                inputs.forEach((input) => {
+                    mappings.push({
+                        mask: input.dataset.mask,
+                        value: input.value,
+                    });
+                });
+
+                entities.innerHTML = "<p>Reverting text...</p>";
+                output.classList.remove("hidden");
+
+                // Animate the reverting
+                await animateReverting(text, mappings);
+                entities.innerHTML = "<p>Text reverted successfully</p>";
+            });
+
+            dropzone.addEventListener("click", () => fileInput.click());
+            dropzone.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                dropzone.classList.add("dragover");
+            });
+            dropzone.addEventListener("dragleave", () =>
+                dropzone.classList.remove("dragover"),
+            );
+            dropzone.addEventListener("drop", (e) => {
+                e.preventDefault();
+                dropzone.classList.remove("dragover");
+                if (e.dataTransfer.files.length) {
+                    selectedFile = e.dataTransfer.files[0];
+                    fileName.textContent = "Selected: " + selectedFile.name;
+                    fileName.classList.remove("hidden");
+                }
+            });
+            fileInput.addEventListener("change", () => {
+                if (fileInput.files.length) {
+                    selectedFile = fileInput.files[0];
+                    fileName.textContent = "Selected: " + selectedFile.name;
+                    fileName.classList.remove("hidden");
+                }
+            });
+
+            detectBtn.addEventListener("click", async () => {
+                results.classList.remove("hidden");
+                loading.classList.remove("hidden");
+                error.classList.add("hidden");
+                output.classList.add("hidden");
+
+                try {
+                    let response;
+                    if (activeTab === "file") {
+                        if (!selectedFile) {
+                            throw new Error("Please select a file first");
+                        }
+                        const formData = new FormData();
+                        formData.append("file", selectedFile);
+                        response = await fetch("/upload", {
+                            method: "POST",
+                            body: formData,
+                        });
+                    } else {
+                        const text = textInput.value.trim();
+                        if (!text) {
+                            throw new Error("Please enter some text");
+                        }
+                        response = await fetch("/detect", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text }),
+                        });
+                    }
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || "Detection failed");
+                    }
+
+                    const data = await response.json();
+
+                    // Get original text for animation
+                    let originalText;
+                    if (activeTab === "file" && selectedFile) {
+                        originalText = await selectedFile.text();
+                    } else {
+                        originalText = textInput.value;
+                    }
+
+                    loading.classList.add("hidden");
+                    output.classList.remove("hidden");
+
+                    entities.innerHTML =
+                        data.entities.length === 0
+                            ? "<p>No PII detected</p>"
+                            : data.entities
+                                  .map(
+                                      (e) =>
+                                          `<span class="entity ${e.source}">
+                            <span class="entity-type">${e.entity_type}</span>:
+                            "${e.original}" → ${e.masked_as}
+                        </span>`,
+                                  )
+                                  .join("");
+
+                    // Animate the masking
+                    await animateMasking(originalText, data.entities);
+                } catch (err) {
+                    loading.classList.add("hidden");
+                    error.textContent = err.message;
+                    error.classList.remove("hidden");
+                }
+            });
+        </script>
+    </body>
+</html>
