@@ -178,12 +178,12 @@
                 }
             }
             .highlight-mask {
-                animation: highlight-mask 0.6s ease-out forwards;
+                animation: highlight-mask 0.3s ease-out forwards;
                 border-radius: 3px;
                 padding: 0 2px;
             }
             .highlight-revert {
-                animation: highlight-revert 0.6s ease-out forwards;
+                animation: highlight-revert 0.3s ease-out forwards;
                 border-radius: 3px;
                 padding: 0 2px;
             }
@@ -314,9 +314,9 @@
                     );
                     if (span) {
                         span.classList.add("highlight-mask");
-                        await sleep(300);
+                        await sleep(150);
                         span.textContent = span.dataset.masked;
-                        await sleep(400);
+                        await sleep(200);
                     }
                 }
             }
@@ -364,9 +364,9 @@
                     );
                     if (span) {
                         span.classList.add("highlight-revert");
-                        await sleep(300);
+                        await sleep(150);
                         span.textContent = span.dataset.value;
-                        await sleep(400);
+                        await sleep(200);
                     }
                 }
             }
@@ -561,7 +561,7 @@
                                       (e) =>
                                           `<span class="entity ${e.source}">
                             <span class="entity-type">${e.entity_type}</span>:
-                            "${e.original}" → ${e.masked_as}
+                            "${escapeHtml(e.original)}" → ${escapeHtml(e.masked_as)}
                         </span>`,
                                   )
                                   .join("");

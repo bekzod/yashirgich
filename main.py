@@ -17,15 +17,14 @@ async def lifespan(app: FastAPI):
     """Load models on startup."""
     global ner_pipeline, presidio_analyzer
 
-    # Load rubai model (primary - optimized for Uzbek)
+    # Load rubai model (optimized for Uzbek)
     ner_pipeline = pipeline(
         "ner",
         model="islomov/rubai-PII-detection-v1-latin",
         aggregation_strategy="simple"
     )
 
-    # Load Presidio analyzer (backup - rule-based, good for emails, IPs, URLs, etc.)
-    # Support both English (for pattern matching) and Russian (for Cyrillic text)
+    # Load Presidio analyzer for pattern-based detection (emails, phones, IPs, etc.)
     provider = NlpEngineProvider(nlp_configuration={
         "nlp_engine_name": "spacy",
         "models": [
@@ -135,6 +134,18 @@ def has_cyrillic(text: str) -> bool:
     return any('\u0400' <= c <= '\u04FF' for c in text)
 
 
+# Presidio entity types to detect (limited set for pattern-based detection)
+PRESIDIO_ENTITIES = {
+    "EMAIL_ADDRESS",
+    "PHONE_NUMBER",
+    "CREDIT_CARD",
+    "IP_ADDRESS",
+    "URL",
+    "IBAN_CODE",
+    "US_SSN",
+    "DATE_TIME",
+}
+
 # Map Presidio entity types to our naming convention
 PRESIDIO_TYPE_MAP = {
     "EMAIL_ADDRESS": "email",
@@ -144,48 +155,21 @@ PRESIDIO_TYPE_MAP = {
     "URL": "url",
     "IBAN_CODE": "iban",
     "US_SSN": "ssn",
-    "PERSON": "name",
-    "LOCATION": "address",
     "DATE_TIME": "date",
 }
 
 
-def detect_with_rubai(text: str, original_text: str | None = None, position_map: list[int] | None = None) -> list[dict]:
-    """
-    Detect PII using the rubai model.
-    If position_map is provided, maps positions back to original text.
-    """
-    results = ner_pipeline(text)
-    entities = []
-    for r in results:
-        if r["entity_group"] != "TEXT":
-            start, end = r["start"], r["end"]
-
-            # Map positions back if we transliterated
-            if position_map is not None and original_text is not None:
-                orig_start, orig_end = map_positions_back(start, end, position_map, original_text)
-                entity_text = original_text[orig_start:orig_end]
-                start, end = orig_start, orig_end
-            else:
-                entity_text = r["word"]
-
-            entities.append({
-                "start": start,
-                "end": end,
-                "text": entity_text,
-                "type": r["entity_group"].lower(),
-                "source": "rubai"
-            })
-    return entities
-
-
 def detect_with_presidio(text: str) -> list[dict]:
-    """Detect PII using Presidio as backup. Runs both English and Russian passes."""
+    """Detect PII using Presidio for specific pattern-based entities."""
     entities = []
     seen_spans: set[tuple[int, int]] = set()
 
     for lang in ["en", "ru"]:
-        results = presidio_analyzer.analyze(text=text, language=lang)
+        results = presidio_analyzer.analyze(
+            text=text,
+            language=lang,
+            entities=list(PRESIDIO_ENTITIES)
+        )
         for r in results:
             # Skip if we already detected this span
             if (r.start, r.end) in seen_spans:
@@ -204,22 +188,98 @@ def detect_with_presidio(text: str) -> list[dict]:
     return entities
 
 
+def detect_with_rubai(text: str, original_text: str | None = None, position_map: list[int] | None = None) -> list[dict]:
+    """
+    Detect PII using the rubai model.
+    If position_map is provided, maps positions back to original text.
+    """
+    results = ner_pipeline(text)
+    entities = []
+    for r in results:
+        # Skip TEXT and DATE entities (DATE handled by Presidio to avoid IP conflicts)
+        if r["entity_group"] in ("TEXT", "DATE"):
+            continue
+
+        start, end = r["start"], r["end"]
+
+        # Map positions back if we transliterated
+        if position_map is not None and original_text is not None:
+            orig_start, orig_end = map_positions_back(start, end, position_map, original_text)
+            entity_text = original_text[orig_start:orig_end]
+            start, end = orig_start, orig_end
+        else:
+            entity_text = r["word"]
+
+        entities.append({
+            "start": start,
+            "end": end,
+            "text": entity_text,
+            "type": r["entity_group"].lower(),
+            "source": "rubai"
+        })
+    return entities
+
+
+# Presidio entity types that take priority over rubai
+PRESIDIO_PRIORITY_TYPES = {"url", "phone", "email"}
+
+
+def dedupe_presidio_entities(entities: list[dict]) -> list[dict]:
+    """
+    Remove overlapping Presidio entities, prioritizing email over URL.
+    """
+    # Sort by type priority (email first) then by span length (longer first)
+    type_priority = {"email": 0, "phone": 1, "url": 2}
+    sorted_entities = sorted(
+        entities,
+        key=lambda e: (type_priority.get(e["type"], 99), -(e["end"] - e["start"]))
+    )
+
+    result = []
+    for entity in sorted_entities:
+        overlaps = False
+        for existing in result:
+            if not (entity["end"] <= existing["start"] or entity["start"] >= existing["end"]):
+                overlaps = True
+                break
+        if not overlaps:
+            result.append(entity)
+
+    return result
+
+
 def merge_entities(rubai_entities: list[dict], presidio_entities: list[dict]) -> list[dict]:
     """
     Merge entities from both sources.
-    Rubai takes priority; Presidio fills gaps not covered by rubai.
+    Presidio EMAIL/URL/PHONE take priority; rubai fills gaps for other types.
     """
-    merged = rubai_entities.copy()
+    # Dedupe presidio entities (email takes priority over URL)
+    presidio_entities = dedupe_presidio_entities(presidio_entities)
 
-    for p_entity in presidio_entities:
-        # Check if this region is already covered by rubai
+    # Separate priority presidio entities (EMAIL, URL, PHONE)
+    priority_entities = [e for e in presidio_entities if e["type"] in PRESIDIO_PRIORITY_TYPES]
+    other_presidio = [e for e in presidio_entities if e["type"] not in PRESIDIO_PRIORITY_TYPES]
+
+    # Start with priority presidio entities
+    merged = priority_entities.copy()
+
+    # Add rubai entities that don't overlap with priority entities
+    for r_entity in rubai_entities:
         overlaps = False
-        for r_entity in rubai_entities:
-            # Check for overlap
-            if not (p_entity["end"] <= r_entity["start"] or p_entity["start"] >= r_entity["end"]):
+        for p_entity in priority_entities:
+            if not (r_entity["end"] <= p_entity["start"] or r_entity["start"] >= p_entity["end"]):
                 overlaps = True
                 break
+        if not overlaps:
+            merged.append(r_entity)
 
+    # Add other presidio entities that don't overlap with what we have
+    for p_entity in other_presidio:
+        overlaps = False
+        for existing in merged:
+            if not (p_entity["end"] <= existing["start"] or p_entity["start"] >= existing["end"]):
+                overlaps = True
+                break
         if not overlaps:
             merged.append(p_entity)
 
@@ -229,7 +289,10 @@ def merge_entities(rubai_entities: list[dict], presidio_entities: list[dict]) ->
 
 
 def mask_pii(text: str) -> PIIResponse:
-    """Detect PII using both models and return masked text with entity information."""
+    """Detect PII using rubai model and Presidio, return masked text with entity information."""
+    # Detect with Presidio first (pattern-based: emails, phones, IPs, etc.)
+    presidio_entities = detect_with_presidio(text)
+
     # Check if text contains Cyrillic - if so, transliterate for rubai model
     if has_cyrillic(text):
         transliterated, position_map = transliterate_uzbek_cyrillic(text)
@@ -237,11 +300,11 @@ def mask_pii(text: str) -> PIIResponse:
     else:
         rubai_entities = detect_with_rubai(text)
 
-    # Presidio runs on original text (handles both scripts with en/ru passes)
-    presidio_entities = detect_with_presidio(text)
-
-    # Merge with rubai taking priority
+    # Merge entities (rubai takes priority, presidio fills gaps)
     all_entities = merge_entities(rubai_entities, presidio_entities)
+
+    # Filter out ORGANIZATION entities (we don't want to mask organization names)
+    all_entities = [e for e in all_entities if e["type"].lower() != "organization"]
 
     # Track counters for each entity type
     entity_counters: dict[str, int] = {}
@@ -279,7 +342,7 @@ def mask_pii(text: str) -> PIIResponse:
 
 @app.post("/detect", response_model=PIIResponse, tags=["PII Detection"])
 async def detect_pii(request: PIIRequest):
-    """Detect and mask PII. Uses rubai (primary) + Presidio (backup). Supports Latin/Cyrillic."""
+    """Detect and mask PII using rubai + Presidio. Supports Latin/Cyrillic."""
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
