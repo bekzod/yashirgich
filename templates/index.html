@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="uz">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PII Detection</title>
+        <title>Shaxsiy ma'lumotlarni aniqlash</title>
         <style>
             * {
                 box-sizing: border-box;
@@ -190,16 +190,123 @@
             .animated-text {
                 line-height: 1.8;
             }
+            .copy-section {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .copy-btn {
+                background: #6c757d;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .copy-btn:hover {
+                background: #5a6268;
+            }
+            .copy-btn.copied {
+                background: #28a745;
+            }
+            .btn-group {
+                display: flex;
+                gap: 8px;
+            }
+            .mapping-section {
+                margin-top: 20px;
+                padding: 16px;
+                background: #f8f9fa;
+                border-radius: 6px;
+                border: 1px solid #e9ecef;
+            }
+            .mapping-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 12px;
+            }
+            .mapping-header h4 {
+                margin: 0;
+            }
+            .mapping-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .mapping-table th,
+            .mapping-table td {
+                padding: 8px 12px;
+                text-align: left;
+                border-bottom: 1px solid #dee2e6;
+            }
+            .mapping-table th {
+                background: #e9ecef;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            .mapping-table td {
+                font-family: monospace;
+                font-size: 13px;
+            }
+            .mapping-table .mask-col {
+                background: #fff3cd;
+                cursor: pointer;
+            }
+            .mapping-table .mask-col:hover {
+                background: #ffc107;
+            }
+            .mapping-table .original-col {
+                background: #d4edda;
+            }
+            .paste-area {
+                margin-bottom: 16px;
+                padding: 16px;
+                background: #e7f3ff;
+                border-radius: 6px;
+                border: 1px dashed #007bff;
+            }
+            .paste-area p {
+                margin: 0 0 8px 0;
+                font-size: 14px;
+                color: #0056b3;
+            }
+            .paste-btn {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            .paste-btn:hover {
+                background: #0056b3;
+            }
+            .or-divider {
+                text-align: center;
+                margin: 12px 0;
+                color: #6c757d;
+                font-size: 13px;
+            }
         </style>
     </head>
     <body>
-        <h1>PII Detection</h1>
+        <h1>Shaxsiy ma'lumotlarni aniqlash</h1>
 
         <div class="container">
             <div class="tabs">
-                <button class="tab active" data-tab="file">Upload File</button>
-                <button class="tab" data-tab="text">Enter Text</button>
-                <button class="tab" data-tab="revert">Revert Masking</button>
+                <button class="tab active" data-tab="file">
+                    Faylni yuklash
+                </button>
+                <button class="tab" data-tab="text">Matnni kiritish</button>
+                <button class="tab" data-tab="revert">
+                    Asl holatga qaytarish
+                </button>
             </div>
 
             <div id="file-tab" class="tab-content active">
@@ -209,9 +316,13 @@
                         id="fileInput"
                         accept=".txt,.csv,.json,.md"
                     />
-                    <p>Drag & drop a text file here, or click to select</p>
+                    <p>
+                        Matn faylini bu yerga sudrab olib keling yoki tanlash
+                        uchun bosing
+                    </p>
                     <p style="color: #666; font-size: 14px">
-                        Supports .txt, .csv, .json, .md files
+                        .txt, .csv, .json, .md fayl formatlarini
+                        qo'llab-quvvatlaydi
                     </p>
                 </div>
                 <div
@@ -224,39 +335,72 @@
             <div id="text-tab" class="tab-content">
                 <textarea
                     id="textInput"
-                    placeholder="Enter text to analyze for PII..."
+                    placeholder="Shaxsiy ma'lumotlarni aniqlash uchun matnni kiriting..."
                 ></textarea>
             </div>
 
             <div id="revert-tab" class="tab-content">
+                <div class="paste-area">
+                    <p>Mapping ma'lumotlarini tezkor yuklash:</p>
+                    <button class="paste-btn" id="pasteMappingBtn">
+                        Mappingni joylash
+                    </button>
+                </div>
+                <div class="or-divider">— yoki qo'lda kiriting —</div>
                 <textarea
                     id="revertInput"
-                    placeholder="Paste masked text here (e.g., Hello <<NAME_1>>, your phone is <<PHONE_1>>)..."
+                    placeholder="Yashirilgan matnni bu yerga kiriting (masalan: Salom <<NAME_1>>, sizning telefoningiz <<PHONE_1>>)..."
                 ></textarea>
                 <div
                     id="mappingsContainer"
                     class="hidden"
                     style="margin-top: 16px"
                 >
-                    <h4 style="margin: 0 0 8px 0">Fill in original values:</h4>
+                    <h4 style="margin: 0 0 8px 0">Asl qiymatlarni kiriting:</h4>
                     <div id="mappingsList"></div>
                 </div>
             </div>
 
-            <button class="btn" id="detectBtn">Detect PII</button>
+            <button class="btn" id="detectBtn">
+                Shaxsiy ma'lumotlarni aniqlash
+            </button>
             <button class="btn hidden" id="revertBtn">
-                Revert to Original
+                Asl holatga qaytarish
             </button>
         </div>
 
         <div id="results" class="container hidden">
-            <h2>Results</h2>
-            <div id="loading" class="loading hidden">Analyzing...</div>
+            <h2>Natijalar</h2>
+            <div id="loading" class="loading hidden">Tahlil qilinmoqda...</div>
             <div id="error" class="error hidden"></div>
             <div id="output" class="hidden">
-                <h3>Masked Text</h3>
+                <div class="copy-section">
+                    <h3 style="margin: 0">Yashirilgan matn</h3>
+                    <button class="copy-btn" id="copyMaskedBtn">
+                        Nusxalash
+                    </button>
+                </div>
                 <div id="maskedText" class="masked-text"></div>
-                <h3>Detected Entities</h3>
+
+                <div class="mapping-section" id="mappingSection">
+                    <div class="mapping-header">
+                        <h4>Mapping jadvali</h4>
+                        <button class="copy-btn" id="copyMappingBtn">
+                            Mappingni nusxalash
+                        </button>
+                    </div>
+                    <table class="mapping-table">
+                        <thead>
+                            <tr>
+                                <th>Niqob</th>
+                                <th>Asl qiymat</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingTableBody"></tbody>
+                    </table>
+                </div>
+
+                <h3>Aniqlangan ma'lumotlar</h3>
                 <div id="entities"></div>
             </div>
         </div>
@@ -279,10 +423,16 @@
             const mappingsContainer =
                 document.getElementById("mappingsContainer");
             const mappingsList = document.getElementById("mappingsList");
+            const copyMaskedBtn = document.getElementById("copyMaskedBtn");
+            const copyMappingBtn = document.getElementById("copyMappingBtn");
+            const pasteMappingBtn = document.getElementById("pasteMappingBtn");
+            const mappingTableBody =
+                document.getElementById("mappingTableBody");
 
             let selectedFile = null;
             let activeTab = "file";
             let detectedMasks = [];
+            let currentMappingData = null;
 
             // Animate masking: show original text, then highlight and replace each entity one by one
             async function animateMasking(originalText, entities) {
@@ -381,6 +531,27 @@
                 return new Promise((resolve) => setTimeout(resolve, ms));
             }
 
+            // Copy text to clipboard with visual feedback
+            async function copyToClipboard(text, button) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const originalText = button.textContent;
+                    button.textContent = "Nusxalandi!";
+                    button.classList.add("copied");
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.classList.remove("copied");
+                    }, 2000);
+                } catch (err) {
+                    console.error("Nusxalashda xatolik:", err);
+                }
+            }
+
+            // Get plain text from masked text element
+            function getMaskedTextContent() {
+                return maskedText.textContent || maskedText.innerText;
+            }
+
             // Detect <<ENTITY_N>> patterns in text
             function detectMaskedEntities(text) {
                 const pattern = /<<([A-Z_]+_\d+)>>/g;
@@ -402,6 +573,108 @@
                     revertBtn.classList.add("hidden");
                 }
             }
+
+            // Build mapping table from entities
+            function buildMappingTable(entitiesData) {
+                currentMappingData = {
+                    maskedText: "",
+                    mappings: [],
+                };
+
+                mappingTableBody.innerHTML = entitiesData
+                    .map((e) => {
+                        currentMappingData.mappings.push({
+                            mask: e.masked_as,
+                            original: e.original,
+                            type: e.entity_type,
+                        });
+                        return `<tr>
+                            <td class="mask-col" title="Bosib nusxalash">${escapeHtml(e.masked_as)}</td>
+                            <td class="original-col">${escapeHtml(e.original)}</td>
+                        </tr>`;
+                    })
+                    .join("");
+
+                // Add click-to-copy for mask cells
+                mappingTableBody
+                    .querySelectorAll(".mask-col")
+                    .forEach((cell) => {
+                        cell.addEventListener("click", async () => {
+                            await navigator.clipboard.writeText(
+                                cell.textContent,
+                            );
+                            const originalBg = cell.style.backgroundColor;
+                            cell.style.backgroundColor = "#28a745";
+                            cell.style.color = "white";
+                            setTimeout(() => {
+                                cell.style.backgroundColor = "";
+                                cell.style.color = "";
+                            }, 500);
+                        });
+                    });
+            }
+
+            // Copy masked text button
+            copyMaskedBtn.addEventListener("click", () => {
+                copyToClipboard(getMaskedTextContent(), copyMaskedBtn);
+            });
+
+            // Copy mapping as JSON button
+            copyMappingBtn.addEventListener("click", () => {
+                if (currentMappingData) {
+                    currentMappingData.maskedText = getMaskedTextContent();
+                    const jsonStr = JSON.stringify(currentMappingData, null, 2);
+                    copyToClipboard(jsonStr, copyMappingBtn);
+                }
+            });
+
+            // Paste mapping button
+            pasteMappingBtn.addEventListener("click", async () => {
+                try {
+                    const clipText = await navigator.clipboard.readText();
+                    const data = JSON.parse(clipText);
+
+                    if (
+                        data.maskedText &&
+                        data.mappings &&
+                        Array.isArray(data.mappings)
+                    ) {
+                        // Fill in the revert input with masked text
+                        revertInput.value = data.maskedText;
+
+                        // Trigger input event to show mappings
+                        revertInput.dispatchEvent(new Event("input"));
+
+                        // Fill in the mapping values
+                        setTimeout(() => {
+                            data.mappings.forEach((m) => {
+                                const input = mappingsList.querySelector(
+                                    `input[data-mask="${m.mask}"]`,
+                                );
+                                if (input) {
+                                    input.value = m.original;
+                                }
+                            });
+                        }, 100);
+
+                        pasteMappingBtn.textContent = "Yuklandi!";
+                        pasteMappingBtn.style.backgroundColor = "#28a745";
+                        setTimeout(() => {
+                            pasteMappingBtn.textContent = "Mappingni joylash";
+                            pasteMappingBtn.style.backgroundColor = "";
+                        }, 2000);
+                    } else {
+                        throw new Error("Noto'g'ri format");
+                    }
+                } catch (err) {
+                    pasteMappingBtn.textContent = "Xatolik!";
+                    pasteMappingBtn.style.backgroundColor = "#dc3545";
+                    setTimeout(() => {
+                        pasteMappingBtn.textContent = "Mappingni joylash";
+                        pasteMappingBtn.style.backgroundColor = "";
+                    }, 2000);
+                }
+            });
 
             tabs.forEach((tab) => {
                 tab.addEventListener("click", () => {
@@ -430,7 +703,7 @@
                             (mask) =>
                                 `<div class="mapping-row">
                             <label>${mask}</label>
-                            <input type="text" data-mask="${mask}" placeholder="Enter original value...">
+                            <input type="text" data-mask="${mask}" placeholder="Asl qiymatni kiriting...">
                         </div>`,
                         )
                         .join("");
@@ -458,7 +731,7 @@
                 });
 
                 if (!allFilled) {
-                    error.textContent = "Please fill in all mapping values";
+                    error.textContent = "Iltimos, barcha qiymatlarni kiriting";
                     error.classList.remove("hidden");
                     return;
                 }
@@ -472,12 +745,13 @@
                     });
                 });
 
-                entities.innerHTML = "<p>Reverting text...</p>";
+                entities.innerHTML = "<p>Matn qayta tiklanmoqda...</p>";
                 output.classList.remove("hidden");
 
                 // Animate the reverting
                 await animateReverting(text, mappings);
-                entities.innerHTML = "<p>Text reverted successfully</p>";
+                entities.innerHTML =
+                    "<p>Matn muvaffaqiyatli qayta tiklandi</p>";
             });
 
             dropzone.addEventListener("click", () => fileInput.click());
@@ -493,14 +767,14 @@
                 dropzone.classList.remove("dragover");
                 if (e.dataTransfer.files.length) {
                     selectedFile = e.dataTransfer.files[0];
-                    fileName.textContent = "Selected: " + selectedFile.name;
+                    fileName.textContent = "Tanlangan: " + selectedFile.name;
                     fileName.classList.remove("hidden");
                 }
             });
             fileInput.addEventListener("change", () => {
                 if (fileInput.files.length) {
                     selectedFile = fileInput.files[0];
-                    fileName.textContent = "Selected: " + selectedFile.name;
+                    fileName.textContent = "Tanlangan: " + selectedFile.name;
                     fileName.classList.remove("hidden");
                 }
             });
@@ -515,7 +789,7 @@
                     let response;
                     if (activeTab === "file") {
                         if (!selectedFile) {
-                            throw new Error("Please select a file first");
+                            throw new Error("Iltimos, avval faylni tanlang");
                         }
                         const formData = new FormData();
                         formData.append("file", selectedFile);
@@ -526,7 +800,7 @@
                     } else {
                         const text = textInput.value.trim();
                         if (!text) {
-                            throw new Error("Please enter some text");
+                            throw new Error("Iltimos, matn kiriting");
                         }
                         response = await fetch("/detect", {
                             method: "POST",
@@ -537,7 +811,9 @@
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.detail || "Detection failed");
+                        throw new Error(
+                            err.detail || "Aniqlashda xatolik yuz berdi",
+                        );
                     }
 
                     const data = await response.json();
@@ -553,18 +829,27 @@
                     loading.classList.add("hidden");
                     output.classList.remove("hidden");
 
-                    entities.innerHTML =
-                        data.entities.length === 0
-                            ? "<p>No PII detected</p>"
-                            : data.entities
-                                  .map(
-                                      (e) =>
-                                          `<span class="entity ${e.source}">
+                    if (data.entities.length === 0) {
+                        entities.innerHTML =
+                            "<p>Shaxsiy ma'lumotlar aniqlanmadi</p>";
+                        document
+                            .getElementById("mappingSection")
+                            .classList.add("hidden");
+                    } else {
+                        entities.innerHTML = data.entities
+                            .map(
+                                (e) =>
+                                    `<span class="entity ${e.source}">
                             <span class="entity-type">${e.entity_type}</span>:
                             "${escapeHtml(e.original)}" → ${escapeHtml(e.masked_as)}
                         </span>`,
-                                  )
-                                  .join("");
+                            )
+                            .join("");
+                        document
+                            .getElementById("mappingSection")
+                            .classList.remove("hidden");
+                        buildMappingTable(data.entities);
+                    }
 
                     // Animate the masking
                     await animateMasking(originalText, data.entities);

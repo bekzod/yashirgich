@@ -5,7 +5,7 @@ A FastAPI-based service for detecting and masking Personally Identifiable Inform
 ## Features
 
 - **Dual Detection System**
-  - **Primary**: rubai model (`islomov/rubai-PII-detection-v1-latin`) - specialized for Uzbek text
+  - **Primary**: rubai model by **[Sardor Islomov](https://huggingface.co/islomov)** ([`rubai-PII-detection-v1-latin`](https://huggingface.co/islomov/rubai-PII-detection-v1-latin)) - specialized for Uzbek text
   - **Backup**: Microsoft Presidio - rule-based pattern matching for standard formats
 
 - **Multi-Script Support**
