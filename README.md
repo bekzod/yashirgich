@@ -1,12 +1,19 @@
-# PII Detection API
+# PII Detection & OpenAI Proxy API
 
-A FastAPI-based service for detecting and masking Personally Identifiable Information (PII) in text, optimized for Uzbek language with support for both Latin and Cyrillic scripts.
+A FastAPI-based service for detecting and masking Personally Identifiable Information (PII) in text, optimized for Uzbek language with support for both Latin and Cyrillic scripts. Includes an OpenAI-compatible proxy that automatically masks PII in requests and restores it in responses.
 
 ## Features
 
 - **Dual Detection System**
   - **Primary**: rubai model by **[Sardor Islomov](https://huggingface.co/islomov)** ([`rubai-PII-detection-v1-latin`](https://huggingface.co/islomov/rubai-PII-detection-v1-latin)) - specialized for Uzbek text
   - **Backup**: Microsoft Presidio - rule-based pattern matching for standard formats
+
+- **OpenAI Proxy with PII Protection**
+  - Drop-in replacement for OpenAI API endpoints
+  - Automatic PII masking in outgoing requests
+  - Automatic PII restoration in responses
+  - Supports streaming and non-streaming requests
+  - Redis-backed or in-memory storage for replacement mappings
 
 - **Multi-Script Support**
   - Latin script (default)
@@ -50,6 +57,14 @@ pip install -r requirements.txt
 ```bash
 python -m spacy download en_core_web_sm
 python -m spacy download ru_core_news_sm
+```
+
+4. Configure environment variables (optional):
+```bash
+cp .env.example .env
+# Edit .env with your settings:
+# - OPENAI_API_KEY: Your OpenAI API key (for proxy functionality)
+# - REDIS_URL: Redis connection URL (optional, defaults to in-memory storage)
 ```
 
 ## Usage
@@ -150,6 +165,86 @@ Check service health and model status.
 }
 ```
 
+### 4. OpenAI Proxy with PII Protection
+
+**POST** `/proxy/v1/chat/completions`
+
+OpenAI-compatible chat completions endpoint that automatically masks PII in your requests before sending to OpenAI and restores it in responses.
+
+**Features:**
+- Transparent PII masking/restoration
+- Supports streaming and non-streaming
+- Drop-in replacement for OpenAI API
+- Redis or in-memory storage for mappings
+
+**Setup:**
+1. Set your OpenAI API key:
+```bash
+export OPENAI_API_KEY=sk-...
+# Or pass in Authorization header
+```
+
+2. Optional: Configure Redis for distributed deployments:
+```bash
+export REDIS_URL=redis://localhost:6379/0
+```
+
+**Usage with OpenAI SDK:**
+
+```python
+from openai import OpenAI
+
+# Point to the proxy instead of OpenAI directly
+client = OpenAI(
+    base_url="http://localhost:8000/proxy/v1",
+    api_key="sk-..."  # Your OpenAI API key
+)
+
+# Use normally - PII is automatically masked/restored
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{
+        "role": "user",
+        "content": "Sardor Rustamov telefon raqami 90 123 45 67"
+    }]
+)
+```
+
+**What Happens:**
+1. Your request: `"Sardor Rustamov telefon raqami 90 123 45 67"`
+2. Masked request to OpenAI: `"<<NAME_1>> telefon raqami <<PHONE_1>>"`
+3. OpenAI processes masked data
+4. Response is automatically restored with original PII
+5. You receive the complete response with real names/numbers
+
+**Streaming Example:**
+
+```python
+stream = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Call Sardor at 90 123 45 67"}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST "http://localhost:8000/proxy/v1/chat/completions" \
+  -H "Authorization: Bearer sk-..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {"role": "user", "content": "Sardor Rustamov telefon raqami 90 123 45 67"}
+    ]
+  }'
+```
+
 ## Examples
 
 ### Python Client
@@ -246,9 +341,32 @@ You can customize the service using environment variables:
 export HOST=0.0.0.0
 export PORT=8000
 
+# OpenAI Proxy configuration
+export OPENAI_API_KEY=sk-...  # Required for proxy functionality
+export REDIS_URL=redis://localhost:6379/0  # Optional, for distributed deployments
+
 # Model configuration (optional)
 export RUBAI_MODEL=islomov/rubai-PII-detection-v1-latin
 ```
+
+### Redis Setup (Optional)
+
+For production deployments or distributed systems, use Redis to store PII replacement mappings:
+
+```bash
+# Install Redis
+brew install redis  # macOS
+# or
+apt-get install redis  # Ubuntu
+
+# Start Redis
+redis-server
+
+# Install Python Redis client (already in requirements.txt)
+pip install redis
+```
+
+Without Redis, the service uses in-memory storage (suitable for single-instance deployments).
 
 ### Production Deployment
 
@@ -272,6 +390,8 @@ Main dependencies (see `requirements.txt` for full list):
 - **spacy**: NLP processing
 - **torch**: Deep learning backend
 - **uvicorn**: ASGI server
+- **httpx**: HTTP client for OpenAI proxy
+- **redis** (optional): For distributed PII mapping storage
 
 ## Performance Considerations
 
@@ -296,12 +416,30 @@ Example error response:
 }
 ```
 
+## Use Cases
+
+### 1. Direct PII Detection
+Use the `/detect` endpoint for standalone PII detection and masking in your applications.
+
+### 2. OpenAI Proxy for Privacy
+Route your OpenAI API calls through the proxy to ensure PII never leaves your infrastructure in plaintext:
+- Customer support chatbots
+- Document analysis systems
+- Data processing pipelines
+- Any LLM application handling sensitive information
+
+### 3. Compliance and Data Protection
+- GDPR compliance for EU users
+- HIPAA compliance for healthcare data
+- General data protection best practices
+
 ## Limitations
 
 - Supports primarily Uzbek, English, and Russian text
 - Best performance on Latin and Cyrillic scripts
 - File uploads limited to UTF-8 encoded text
 - Some uncommon PII patterns may not be detected
+- OpenAI proxy adds slight latency for PII detection/restoration
 
 ## Contributing
 
