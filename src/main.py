@@ -14,8 +14,8 @@ from presidio_analyzer.nlp_engine import NlpEngineProvider
 from pydantic import BaseModel
 from transformers import pipeline
 
-from replacement_store import ReplacementStore, init_replacement_store
-from utils import (
+from .replacement_store import ReplacementStore, init_replacement_store
+from .utils import (
     detect_with_presidio,
     detect_with_rubai,
     has_cyrillic,

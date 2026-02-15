@@ -2,7 +2,7 @@
 
 import pytest
 
-from utils import (
+from src.utils import (
     CYRILLIC_TO_LATIN,
     PRESIDIO_ENTITIES,
     PRESIDIO_PRIORITY_TYPES,

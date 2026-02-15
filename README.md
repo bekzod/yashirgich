@@ -72,7 +72,7 @@ cp .env.example .env
 ### Starting the Server
 
 ```bash
-uvicorn main:app --reload
+uvicorn src.main:app --reload
 ```
 
 The server will start at `http://localhost:8000`
@@ -374,7 +374,7 @@ For production deployment:
 
 ```bash
 # Using Gunicorn with Uvicorn workers
-gunicorn main:app \
+gunicorn src.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000

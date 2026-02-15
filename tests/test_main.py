@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from main import (
+from src.main import (
     MaskedEntity,
     PIIResponse,
     process_messages_for_pii,
     restore_pii,
 )
-from replacement_store import InMemoryReplacementStore
+from src.replacement_store import InMemoryReplacementStore
 
 
 class TestInMemoryReplacementStore:
@@ -106,7 +106,7 @@ class TestRestorePii:
 class TestProcessMessagesForPii:
     """Tests for process_messages_for_pii function."""
 
-    @patch("main.mask_text_simple")
+    @patch("src.main.mask_text_simple")
     def test_string_content(self, mock_mask):
         """Test processing messages with string content."""
         mock_mask.return_value = ("masked text", {"<<EMAIL_1>>": "test@example.com"})
@@ -117,7 +117,7 @@ class TestProcessMessagesForPii:
         assert processed[0]["content"] == "masked text"
         assert "<<EMAIL_1>>" in combined_map
 
-    @patch("main.mask_text_simple")
+    @patch("src.main.mask_text_simple")
     def test_multimodal_content(self, mock_mask):
         """Test processing messages with multimodal content."""
         mock_mask.return_value = ("masked text", {"<<EMAIL_1>>": "test@example.com"})
@@ -140,7 +140,7 @@ class TestProcessMessagesForPii:
         assert processed[0]["content"][0]["text"] == "masked text"
         assert processed[0]["content"][1]["type"] == "image_url"
 
-    @patch("main.mask_text_simple")
+    @patch("src.main.mask_text_simple")
     def test_multiple_messages(self, mock_mask):
         """Test processing multiple messages."""
         call_count = [0]
@@ -167,7 +167,7 @@ class TestProcessMessagesForPii:
         assert processed == []
         assert combined_map == {}
 
-    @patch("main.mask_text_simple")
+    @patch("src.main.mask_text_simple")
     def test_non_string_non_list_content(self, mock_mask):
         """Test that non-string, non-list content is passed through."""
         messages = [{"role": "user", "content": None}]
@@ -239,13 +239,13 @@ class TestPIIResponse:
 @pytest.fixture
 def client():
     """Create a test client with mocked models."""
-    from main import app
+    from src.main import app
 
     # We need to mock the global models since they're loaded in lifespan
     with (
-        patch("main.ner_pipeline") as mock_ner,
-        patch("main.presidio_analyzer") as mock_presidio,
-        patch("main.replacement_store") as mock_store,
+        patch("src.main.ner_pipeline") as mock_ner,
+        patch("src.main.presidio_analyzer") as mock_presidio,
+        patch("src.main.replacement_store") as mock_store,
     ):
         mock_ner.return_value = []
         mock_presidio.analyze.return_value = []
@@ -262,7 +262,7 @@ class TestHealthEndpoint:
 
     def test_health_models_not_loaded(self):
         """Test health check when models are not loaded."""
-        import main
+        from src import main
 
         # Save original values
         original_ner = main.ner_pipeline
@@ -295,7 +295,7 @@ class TestHealthEndpoint:
 
     def test_health_models_loaded(self):
         """Test health check when models are loaded."""
-        import main
+        from src import main
 
         # Save original values
         original_ner = main.ner_pipeline
@@ -334,27 +334,38 @@ class TestDetectEndpoint:
 
     def test_detect_empty_text(self):
         """Test detect endpoint with empty text."""
-        from main import app
+        import src.main as main_module
 
-        with (
-            patch("main.ner_pipeline", MagicMock()),
-            patch("main.presidio_analyzer", MagicMock()),
-        ):
-            with TestClient(app, raise_server_exceptions=False) as client:
+        # Patch the global variables directly
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        try:
+            main_module.ner_pipeline = MagicMock()
+            main_module.presidio_analyzer = MagicMock()
+
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
                 response = client.post("/detect", json={"text": ""})
                 assert response.status_code == 400
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
 
     def test_detect_whitespace_only(self):
         """Test detect endpoint with whitespace only."""
-        from main import app
+        import src.main as main_module
 
-        with (
-            patch("main.ner_pipeline", MagicMock()),
-            patch("main.presidio_analyzer", MagicMock()),
-        ):
-            with TestClient(app, raise_server_exceptions=False) as client:
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        try:
+            main_module.ner_pipeline = MagicMock()
+            main_module.presidio_analyzer = MagicMock()
+
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
                 response = client.post("/detect", json={"text": "   "})
                 assert response.status_code == 400
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
 
 
 class TestUploadEndpoint:
@@ -362,20 +373,25 @@ class TestUploadEndpoint:
 
     def test_upload_empty_file(self):
         """Test upload endpoint with empty file."""
-        from main import app
+        import src.main as main_module
 
-        with (
-            patch("main.ner_pipeline", MagicMock(return_value=[])),
-            patch("main.presidio_analyzer") as mock_presidio,
-        ):
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        try:
+            main_module.ner_pipeline = MagicMock(return_value=[])
+            mock_presidio = MagicMock()
             mock_presidio.analyze.return_value = []
+            main_module.presidio_analyzer = mock_presidio
 
-            with TestClient(app, raise_server_exceptions=False) as client:
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
                 response = client.post(
                     "/upload",
                     files={"file": ("test.txt", b"", "text/plain")},
                 )
                 assert response.status_code == 400
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
 
 
 class TestProxyEndpoint:
@@ -383,59 +399,73 @@ class TestProxyEndpoint:
 
     def test_proxy_no_api_key(self):
         """Test proxy endpoint without API key."""
-        from main import app
+        import os
 
-        with (
-            patch("main.ner_pipeline", MagicMock()),
-            patch("main.presidio_analyzer", MagicMock()),
-            patch("main.replacement_store", MagicMock()),
-            patch.dict("os.environ", {}, clear=True),
-        ):
-            # Remove OPENAI_API_KEY if it exists
-            import os
+        import src.main as main_module
 
-            env_backup = os.environ.get("OPENAI_API_KEY")
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        original_store = main_module.replacement_store
+        env_backup = os.environ.get("OPENAI_API_KEY")
+
+        try:
+            main_module.ner_pipeline = MagicMock()
+            main_module.presidio_analyzer = MagicMock()
+            main_module.replacement_store = MagicMock()
+
             if "OPENAI_API_KEY" in os.environ:
                 del os.environ["OPENAI_API_KEY"]
 
-            try:
-                with TestClient(app, raise_server_exceptions=False) as client:
-                    response = client.post(
-                        "/proxy/v1/chat/completions",
-                        json={"messages": [{"role": "user", "content": "Hello"}]},
-                    )
-                    assert response.status_code == 401
-            finally:
-                if env_backup:
-                    os.environ["OPENAI_API_KEY"] = env_backup
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
+                response = client.post(
+                    "/proxy/v1/chat/completions",
+                    json={"messages": [{"role": "user", "content": "Hello"}]},
+                )
+                assert response.status_code == 401
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
+            main_module.replacement_store = original_store
+            if env_backup:
+                os.environ["OPENAI_API_KEY"] = env_backup
 
     def test_proxy_no_messages(self):
         """Test proxy endpoint without messages."""
-        from main import app
+        import src.main as main_module
 
-        with (
-            patch("main.ner_pipeline", MagicMock()),
-            patch("main.presidio_analyzer", MagicMock()),
-            patch("main.replacement_store", MagicMock()),
-        ):
-            with TestClient(app, raise_server_exceptions=False) as client:
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        original_store = main_module.replacement_store
+        try:
+            main_module.ner_pipeline = MagicMock()
+            main_module.presidio_analyzer = MagicMock()
+            main_module.replacement_store = MagicMock()
+
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
                 response = client.post(
                     "/proxy/v1/chat/completions",
                     json={},
                     headers={"Authorization": "Bearer test-key"},
                 )
                 assert response.status_code == 400
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
+            main_module.replacement_store = original_store
 
     def test_proxy_invalid_json(self):
         """Test proxy endpoint with invalid JSON."""
-        from main import app
+        import src.main as main_module
 
-        with (
-            patch("main.ner_pipeline", MagicMock()),
-            patch("main.presidio_analyzer", MagicMock()),
-            patch("main.replacement_store", MagicMock()),
-        ):
-            with TestClient(app, raise_server_exceptions=False) as client:
+        original_ner = main_module.ner_pipeline
+        original_presidio = main_module.presidio_analyzer
+        original_store = main_module.replacement_store
+        try:
+            main_module.ner_pipeline = MagicMock()
+            main_module.presidio_analyzer = MagicMock()
+            main_module.replacement_store = MagicMock()
+
+            with TestClient(main_module.app, raise_server_exceptions=False) as client:
                 response = client.post(
                     "/proxy/v1/chat/completions",
                     content="invalid json",
@@ -445,3 +475,7 @@ class TestProxyEndpoint:
                     },
                 )
                 assert response.status_code == 400
+        finally:
+            main_module.ner_pipeline = original_ner
+            main_module.presidio_analyzer = original_presidio
+            main_module.replacement_store = original_store
