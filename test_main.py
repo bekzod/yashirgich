@@ -10,7 +10,6 @@ from main import (
     InMemoryReplacementStore,
     MaskedEntity,
     PIIResponse,
-    mask_text_simple,
     process_messages_for_pii,
     restore_pii,
 )
