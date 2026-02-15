@@ -16,15 +16,21 @@ def mock_models():
     mock_presidio = MagicMock()
     mock_presidio.analyze = MagicMock(return_value=[])
 
+    # Mock NLP engine
+    mock_engine = MagicMock()
+    mock_provider = MagicMock()
+    mock_provider.return_value.create_engine.return_value = mock_engine
+
+    # Patch at both the source module and where it's imported in src.main
     with (
         patch("transformers.pipeline", return_value=mock_ner),
+        patch("src.main.pipeline", return_value=mock_ner),
         patch("presidio_analyzer.AnalyzerEngine", return_value=mock_presidio),
-        patch("presidio_analyzer.nlp_engine.NlpEngineProvider") as mock_provider,
+        patch("src.main.AnalyzerEngine", return_value=mock_presidio),
+        patch("presidio_analyzer.nlp_engine.NlpEngineProvider", mock_provider),
+        patch("src.main.NlpEngineProvider", mock_provider),
+        patch("src.main.RecognizerRegistry", MagicMock()),
     ):
-        # Mock the NLP engine provider
-        mock_engine = MagicMock()
-        mock_provider.return_value.create_engine.return_value = mock_engine
-
         yield {
             "ner_pipeline": mock_ner,
             "presidio_analyzer": mock_presidio,
