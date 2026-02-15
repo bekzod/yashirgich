@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
@@ -15,6 +16,9 @@ from utils import (
     merge_entities,
     transliterate_uzbek_cyrillic,
 )
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Global instances
 ner_pipeline = None

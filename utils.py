@@ -134,13 +134,15 @@ def detect_with_rubai(text: str, ner_pipeline, original_text: str | None = None,
         else:
             entity_text = r["word"]
 
-        entities.append({
-            "start": start,
-            "end": end,
-            "text": entity_text,
-            "type": r["entity_group"].lower(),
-            "source": "rubai"
-        })
+        entities.append(
+            {
+                "start": start,
+                "end": end,
+                "text": entity_text,
+                "type": r["entity_group"].lower(),
+                "source": "rubai",
+            }
+        )
     return entities
 
 
@@ -152,7 +154,7 @@ def dedupe_presidio_entities(entities: list[dict]) -> list[dict]:
     type_priority = {"email": 0, "phone": 1, "url": 2}
     sorted_entities = sorted(
         entities,
-        key=lambda e: (type_priority.get(e["type"], 99), -(e["end"] - e["start"]))
+        key=lambda e: (type_priority.get(e["type"], 99), -(e["end"] - e["start"])),
     )
 
     result = []

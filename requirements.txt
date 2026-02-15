@@ -6,3 +6,4 @@ pydantic>=2.0.0
 presidio-analyzer>=2.2.0
 spacy>=3.7.0
 pymorphy2>=0.9.1
+python-dotenv>=1.0.0
