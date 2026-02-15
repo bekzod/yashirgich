@@ -7,12 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import (
-    InMemoryReplacementStore,
     MaskedEntity,
     PIIResponse,
     process_messages_for_pii,
     restore_pii,
 )
+from replacement_store import InMemoryReplacementStore
 
 
 class TestInMemoryReplacementStore:
